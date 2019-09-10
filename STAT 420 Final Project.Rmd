@@ -1,0 +1,136 @@
+---
+title: "STAT 420 Final Project: Does College Quarterback Experience Translate to Professional Success?"
+author: "Ajay Dugar (dugar3), Sam Swislow (swislow2), Sairaj Vorugant (sairajv2)"
+date: "August 3, 2019"
+output: html_document
+---
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+qb_data = data.frame(readxl::read_xlsx("STAT 420 Final Project QB Data.xlsx"))
+colnames(qb_data) = c("Name", "Avg.NFL.QBR", "Two.Season.Starter", "Pass.Yds.Per.Att", "TD.Int.Ratio", "Comp.Pct", "Rush.Yds.Per.Att","Rush.Tds.Per.G")
+```
+
+# Introduction
+
+In the National Football League(NFL), the quarterback position reigns supreme. For teams without a great quarterback, their main concern is getting one. For teams with a great quarterback, their main concern is maximizing their window to win games. Finding a franchise quarterback isn't an exact science, but as a group of NFL fans, we wanted to see if a quarterback's NFL success is based on their college experience. In order to model this fact, we used a dummy variable to divide the quarterbacks into two groups, quarterbacks with less than 26 college starts (0) and those with 26 or more quarterback starts (1) (26 games = 2 full regular college seasons).
+
+The college dataset was found from [Sports-Reference College Football](https://www.sports-reference.com/cfb/) website and the NFL dataset was found from [Pro Football Reference's website](https://www.pro-football-reference.com/). We examined the set of quarterbacks in the NFL (200 pass attempts per year minimum) dating back from 2005 and recorded their career average QBR. We then fit a multiple linear regression selected using backwards BIC. For the starting full model, we regressed the independent variables of wheter they were at least a two season starter (dummy variable), passing yards per attempt, touchdown to interception ratio, completion percentage, rushing yards per attempt, and rushing yards per game, as well as all three-way interactions, on the dependent variable of their professional career average QBR. To be clear, all of the independent variables are from the player's college career.
+
+We will look at whether the overall model is a good predictor of NFL QBR, as well as whether the coefficient of being a two season starter is statistically significant.
+
+# Methods
+### Data Preprocessing
+
+In order to generate the dataset, we pulled the data from the websites mentioned above and combined them. We took the average QBR of every quarterback for every year of their NFL career. For players who had incomplete data, this data was found from a variety of different sources (old college media guides, calculated by hand, etc.).
+
+### Data Analysis and Model Building
+
+QBR is a proprietary statistic developed by ESPN to measure quarterback performance that takes into account their overall contributions to winning including passing, rushing, turnovers, penalties, with respect to the conditions on the field, such as time left in the game, down, and distance. We chose to use QBR because it is the most precise statistic when it comes to quarterback play, by analyzing each player on a play-to-play level. 
+
+To build the model, we first had to ensure that there was no serious multicollinearity within the data. Below is the correlation matrix:
+
+```{r, echo = FALSE}
+cor(qb_data[,2:8])
+```
+
+With no correlations between the indepedent variables greater than 0.8, we can safely say that there is not any serious multicollineary in the data.
+
+Next, let us reduce the full model using backwards BIC. The summary of the reduced model is below:
+
+```{r}
+full_model = lm(Avg.NFL.QBR ~ (Two.Season.Starter + Pass.Yds.Per.Att + TD.Int.Ratio + Comp.Pct + Rush.Yds.Per.Att + Rush.Tds.Per.G)^3, data = qb_data)
+reduced_model = step(full_model, direction = "backward", k = log(nrow(qb_data)), trace = 0)
+summary(reduced_model)
+```
+
+All of the individual t-tests for the coefficients are all significant at the $\alpha = 0.05$ level. The adjusted $R^2$ value is 0.06037. Let's look at whether this model is a true improvement, based on an F-test with the full model.
+
+```{r}
+anova(full_model, reduced_model)
+```
+
+We have an F-statistic of 1.0446, witha corresponding p-value of 0.4141. So this means that the additional coefficients from the full model don't add any significant explanatory power to the reduced model. So we can continue with the reduced model.
+
+# Results
+
+Based on the reduced model, it appears that we don't have a good regression due to the adjusted $R^2$ value of 0.06037. So we should see if we have any influential points that are throwing off the regression. Well rerun the regression after removing influential points (based of the Cook's Distance metric)
+
+```{r}
+cd = cooks.distance(reduced_model)
+cutoff =  4 / nrow(qb_data)
+influential <- as.numeric(names(cd)[(cd > cutoff)])
+qb_data2 <- qb_data[-influential, ]
+```
+
+We removed 19 points. So let's rerun the reduced model on the reduced data.
+
+```{r}
+reduced_model2 = lm(Avg.NFL.QBR ~ Two.Season.Starter + Pass.Yds.Per.Att + TD.Int.Ratio + 
+    Comp.Pct + Rush.Yds.Per.Att + Rush.Tds.Per.G + Two.Season.Starter:Pass.Yds.Per.Att + 
+    Two.Season.Starter:TD.Int.Ratio + Two.Season.Starter:Comp.Pct + 
+    Two.Season.Starter:Rush.Yds.Per.Att + Two.Season.Starter:Rush.Tds.Per.G + 
+    Pass.Yds.Per.Att:Comp.Pct + TD.Int.Ratio:Rush.Yds.Per.Att + 
+    TD.Int.Ratio:Rush.Tds.Per.G + Comp.Pct:Rush.Yds.Per.Att + 
+    Comp.Pct:Rush.Tds.Per.G + Two.Season.Starter:Pass.Yds.Per.Att:Comp.Pct + 
+    Two.Season.Starter:TD.Int.Ratio:Rush.Yds.Per.Att + Two.Season.Starter:TD.Int.Ratio:Rush.Tds.Per.G + 
+    Two.Season.Starter:Comp.Pct:Rush.Yds.Per.Att + Two.Season.Starter:Comp.Pct:Rush.Tds.Per.G, data = qb_data2)
+summary(reduced_model2)
+```
+
+Looking at this model, we see that we have a large amount of coefficients that are now not defined. Let's cut down the model again.
+
+```{r}
+reduced_model2 = lm(Avg.NFL.QBR ~ Two.Season.Starter + Pass.Yds.Per.Att + TD.Int.Ratio + 
+    Comp.Pct + Rush.Yds.Per.Att + Rush.Tds.Per.G + Two.Season.Starter:Pass.Yds.Per.Att + 
+    Two.Season.Starter:TD.Int.Ratio + Two.Season.Starter:Comp.Pct + 
+    Two.Season.Starter:Rush.Yds.Per.Att + 
+    Pass.Yds.Per.Att:Comp.Pct + TD.Int.Ratio:Rush.Yds.Per.Att + 
+    TD.Int.Ratio:Rush.Tds.Per.G + Comp.Pct:Rush.Yds.Per.Att + 
+    Comp.Pct:Rush.Tds.Per.G, data = qb_data2)
+summary(reduced_model2)
+```
+
+Interestingly enough, both the model's significance and the adjusted $R^2$ value decreased after removing the influential points. Additionally, all the three-way interections were not significant.
+
+Next, we can take a look at the assumptions of the MLR model:
+
+```{r, echo = FALSE}
+plot_fitted_resid = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  plot(fitted(model), resid(model), 
+       col = pointcol, pch = 20, cex = 1.5,
+       xlab = "Fitted", ylab = "Residuals")
+  abline(h = 0, col = linecol, lwd = 2)
+}
+
+plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  qqnorm(resid(model), col = pointcol, pch = 20, cex = 1.5)
+  qqline(resid(model), col = linecol, lwd = 2)
+}
+```
+
+```{r}
+library(lmtest)
+plot_fitted_resid(reduced_model2)
+plot_qq(reduced_model2)
+bptest(reduced_model2)
+shapiro.test(resid(reduced_model2))
+```
+
+Looking at the fitted vs. residual plot, there doesn't appear to be any issues with autocorrelation between the residuals. From the QQ-Plot and the Shapiro-Wilks test, the errors appear to be normal. From the Breusch-Pagan test, there doesn't appear to be issues with heteroskedasticity. 
+
+Is this a good model? Well, in terms of predictive power, it isn't. We went through the correct statistical procedures and ultimately found that college statistics can't really predict NFL success. This we can see by the fact that our adjusted $R^2$ value is so low. But ultimately, our assumptions for model building did hold, and as good statisticians, we can't simply make up results or come to a different conclusion that to what our data is telling us.
+
+# Discussion
+
+So ultimately, we have a model with poor predictive power. But is it useful? Absolutely. What this model does, is verify long-held anecdotal knowledge of college quarterback evaluation. The crux of the matter is that projecting quarterback success from the college to professional level is extremely difficult. From the t-test for the signficiance of the Two.Season.Starter coefficient, it doesn't have a statistically significant effect, even at the $\alpha = 0.20$ level. In fact, none of our coefficients appear to do so either. Quarterback success at the NFL level is one of the hardest things to attempt to project in all of sports. Professional football is a sport with 100 years of history, and yet, we still have notable busts at the position in every draft. Successes like Tom Brady and Russell Wilson and busts like Jamarcus Russell and Ryan Leaf show that numbers aren't everything, and that college experience isn't necessarily a useful metric. 
+
+In the future, in order to improve on such a model, there are a couple of things that must be addressed. First, is a metric that takes into account the difficulty of opponents at the college level. Because of the wide range in challenge between good and bad teams in college football, it isn't necessarily reflected in the raw statistics. Second, the rule changes with respect to passing yards at both the college and professional levels may have impacted these statistics with respect to time. This could be fixed by normalizing each year of each player's data and then recalculating their overall statistics that way.
+
+# Appendix
+
+Below is the full dataset:
+
+```{r}
+View(qb_data)
+```
+
